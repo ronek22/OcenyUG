@@ -16,9 +16,9 @@ class Student:
         self.session = requests.session()
 
     def scraper(self):
-        with open('student.secret','r') as f:
-            login,password = f.read().split(':')
-
+        with open('student.secret') as f:
+            f = f.readlines()
+            login,password = f[0].strip().split(':')
 
         data = {
             'licznik':'s',
@@ -26,13 +26,14 @@ class Student:
             'pass':password
         }
 
+        # LOGOWANIE
         response = self.session.post(loginURL,data=data)
-        # print response.status_code
 
-        # END OF LOGIN
+        # PRZEJSCIE DO INDEKSU
         response = self.session.get(indeksURL)
         page = html.fromstring(response.content)
 
+        # SZUKANIE KIERUNKOW
         kier = page.xpath('//a/@id')[-1]
         kier = kier[4:]
         att = kier.split('_')
@@ -43,8 +44,10 @@ class Student:
             'osobaId':'0'
         }
 
+        # WYBRANIE KIERUNKU, WYSWIETLENIE LISTY SEMESTROW
         response = self.session.get(osURL,params=param)
 
+        # TWORZENIE LISTY SEMESTROW I ICH ID'kow
         page = html.fromstring(response.content)
         sem = page.xpath('//div/@id')
         i = 1
@@ -62,13 +65,14 @@ class Student:
                 semestry.append([a+'2',b])
                 i = 1
 
-        #JAKIS FOR
+
         param = {
             'osobaid':'0',
             'semId':semestry[0][1],
             'wybierzSemKal':semestry[0][0]
         }
 
+        # PRZEJSCIE DO WYBRANEGO SEMESTRU
         response = self.session.get(przedmiotyURL,params=param)
 
         page = html.fromstring(response.content.decode('utf-8'))
