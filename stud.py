@@ -1,6 +1,14 @@
-﻿import requests
+import requests
 from lxml import html
 from getpass import getpass
+from progressbar import ProgressBar,ETA,SimpleProgress,Bar,ReverseBar
+import sys,os
+
+
+def cls():
+    os.system('cls' if os.name=='nt' else 'clear')
+
+
 
 BASE_URL = "https://ps.ug.edu.pl:8443/"
 loginURL="{}login.web?ajax".format(BASE_URL)
@@ -10,26 +18,34 @@ przedmiotyURL="{}getPrzedmioty.web?ajax=true".format(BASE_URL)
 wynikiURL="{}getWyniki.web?ajax=true".format(BASE_URL)
 wynikinotAjax = "{}getWyniki.web?".format(BASE_URL)
 
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
 class Student:
 
     sData = []
 
     def __init__(self):
         self.session = requests.session()
+        self.session.trust_env = False
 
     def scraper(self):
         # with open('student.secret') as f:
         #     f = f.readlines()
         #     login,password = f[0].strip().split(':')
 
+
         login = raw_input('login: ')
         password = getpass('pass: ')
+
+        cls()
 
         data = {
             'licznik':'s',
             'login':login,
             'pass':password
         }
+
 
         # LOGOWANIE
         response = self.session.post(loginURL,data=data)
@@ -70,13 +86,14 @@ class Student:
                 semestry.append([a+'2',b])
                 i = 1
 
-
+        # LOGOWANIE ~ 1s
         ####################################
         ####    MAIN PART OF PROGRAM    ####
         ####################################
         lenSem = len(semestry)
+        pbar = ProgressBar()
 
-        for sem_ID in range(lenSem):
+        for sem_ID in pbar(range(lenSem)):
             param = {
                 'osobaid':'0',
                 'semId':semestry[sem_ID][1],
@@ -108,7 +125,9 @@ class Student:
                 }
                 self.sData[sem_ID].append(courseInfo)
 
+
             for dane in self.sData[sem_ID]:
+
                 param = {
                     'identyfikatorGUI':dane['gid'],
                     'przedmiotId':dane['pid']
@@ -170,9 +189,15 @@ class Student:
             for i in self.sData[x]:
                 print "%60s: %3s" % (i['name'],i['grade'])
             print '-'*65
-            self.average(self.sData[x])
+            print "%59s: %3.2f" % ("Srednia",self.average(self.sData[x]))
+
             print ""
 
+        av = 0
+        for x in range(lenSem):
+            av += self.average(self.sData[x])
+        print "%65s" % ("Srednia ze studiow")
+        print "%59s: %3.2f" % ("Srednia",av/(x+1))
 
 
 
@@ -203,8 +228,7 @@ class Student:
                 count+=1
                 suma+=i['grade']
 
-        print "%59s: %3.2f" % ("Srednia",(suma/count))
-
+        return suma/count
     def sem2word(self,sem):
         next = str(int(sem[:-1])+1)
         if sem[-1] == '1':
