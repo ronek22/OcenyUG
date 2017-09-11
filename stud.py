@@ -1,7 +1,6 @@
 ﻿import requests
 from lxml import html
-import sys,unicodedata
-import os
+from getpass import getpass
 
 BASE_URL = "https://ps.ug.edu.pl:8443/"
 loginURL="{}login.web?ajax".format(BASE_URL)
@@ -19,9 +18,12 @@ class Student:
         self.session = requests.session()
 
     def scraper(self):
-        with open('student.secret') as f:
-            f = f.readlines()
-            login,password = f[0].strip().split(':')
+        # with open('student.secret') as f:
+        #     f = f.readlines()
+        #     login,password = f[0].strip().split(':')
+
+        login = raw_input('login: ')
+        password = getpass('pass: ')
 
         data = {
             'licznik':'s',
@@ -69,90 +71,107 @@ class Student:
                 i = 1
 
 
-        param = {
-            'osobaid':'0',
-            'semId':semestry[0][1],
-            'wybierzSemKal':semestry[0][0]
-        }
+        ####################################
+        ####    MAIN PART OF PROGRAM    ####
+        ####################################
+        lenSem = len(semestry)
 
-        # PRZEJSCIE DO WYBRANEGO SEMESTRU
-        response = self.session.get(przedmiotyURL,params=param)
-
-        #GET PRZEDMIOT ID
-        test = response.text.decode('utf-8')
-        positions = list(self.find_all(test,"var urlParams"))
-        pID = self.getPrzedmiotId(positions,test)
-
-        # ZALADOWANIE DO SLOWNIKA NAZW,ID,GUIID PRZEDMIOTOW
-        page = html.fromstring(response.content.decode('utf-8'))
-        przedmioty = page.xpath('//a')
-        gID = page.xpath('//a/@id')
-        gID = [w[11:] for w in gID]
-        for x in range(len(przedmioty)):
-            course= "".join(przedmioty[x].itertext())
-            courseInfo = {
-                'name':course,
-                'pid':pID[x],
-                'gid':gID[x]
-            }
-            self.sData.append(courseInfo)
-
-        for i in range(len(self.sData)):
+        for sem_ID in range(lenSem):
             param = {
-                'identyfikatorGUI':self.sData[i]['gid'],
-                'przedmiotId':self.sData[i]['pid']
+                'osobaid':'0',
+                'semId':semestry[sem_ID][1],
+                'wybierzSemKal':semestry[sem_ID][0]
             }
 
-            if self.sData[i]['pid']==self.sData[i]['gid'][:-2]:
-                param['osobaId']='0'
-                response = self.session.get(przedmiotyURL,params=param)
-                # print response.status_code
-                page = html.fromstring(response.content.decode('utf-8'))
-                temp_gid = page.xpath('//a/@id')[0][11:]
-                temp_id = int(temp_gid[:-2])+1
-                self.sData[i]['pid']=str(temp_id)
-                self.sData[i]['gid']=temp_gid
+            # PRZEJSCIE DO WYBRANEGO SEMESTRU
+            response = self.session.get(przedmiotyURL,params=param)
+            # print "SEMESTRY", response.status_code
 
+            self.sData.append([])
+
+            #GET PRZEDMIOT ID
+            test = response.text.decode('utf-8')
+            positions = list(self.find_all(test,"var urlParams"))
+            pID = self.getPrzedmiotId(positions,test)
+
+            # ZALADOWANIE DO SLOWNIKA NAZW,ID,GUIID PRZEDMIOTOW
+            page = html.fromstring(response.content.decode('utf-8'))
+            przedmioty = page.xpath('//a')
+            gID = page.xpath('//a/@id')
+            gID = [w[11:] for w in gID]
+            for x in range(len(przedmioty)):
+                course= "".join(przedmioty[x].itertext())
+                courseInfo = {
+                    'name':course,
+                    'pid':pID[x],
+                    'gid':gID[x]
+                }
+                self.sData[sem_ID].append(courseInfo)
+
+            for dane in self.sData[sem_ID]:
                 param = {
-                    'identyfikatorGUI':self.sData[i]['gid'],
-                    'przedmiotId':self.sData[i]['pid']
+                    'identyfikatorGUI':dane['gid'],
+                    'przedmiotId':dane['pid']
                 }
 
-                response = self.session.get(wynikiURL,params=param)
-                # print response.status_code
+                if dane['pid']==dane['gid'].split('_')[0]:
+                    param['osobaId']='0'
+                    # ROZWIENIECIE PIERWSZEJ ZAKLADKI
+                    response = self.session.get(przedmiotyURL,params=param)
 
+                    # WYCIAGNIECIE ID I GUID PRZEDMIOTU
+                    page = html.fromstring(response.content.decode('utf-8'))
+                    temp_gid = page.xpath('//a/@id')[0][11:]
+                    test = response.text.decode('utf-8')
+                    positions = list(self.find_all(test,"var urlParams"))
+                    temp_id = self.getPrzedmiotId(positions,test)[0]
+                    dane['pid']=temp_id
+                    dane['gid']=temp_gid
+
+                    param = {
+                        'identyfikatorGUI':dane['gid'],
+                        'przedmiotId':dane['pid']
+                    }
+
+                    response = self.session.get(wynikiURL,params=param)
+                    # print "WYNIK ZAG",dane['name'],dane['gid'],dane['pid'], response.status_code
+
+                    page = html.fromstring(response.content.decode('utf-8'))
+                    grade = page.xpath("//td[@style='color: green; vertical-align: middle' or @style='color: red; vertical-align: middle']/text()")[0]
+                    grade = "".join(str(grade).split())
+                    try:
+                        grade = float(grade)
+                    except ValueError:
+                        pass
+
+                    dane['grade']=grade
+
+                response = self.session.get(wynikiURL,params=param)
+                # print "WYNIK",dane['name'],dane['gid'],dane['pid'], response.status_code
                 page = html.fromstring(response.content.decode('utf-8'))
-                grade = page.xpath("//td[@style='color: green; vertical-align: middle' or @style='color: black; vertical-align: middle']/text()")[0]
+                grade = page.xpath("//td[@style='color: green; vertical-align: middle' or @style='color: red; vertical-align: middle']/text()")[0]
                 grade = "".join(str(grade).split())
                 try:
                     grade = float(grade)
                 except ValueError:
                     pass
+                dane['grade']=grade
+                param = {
+                    'osobaid':'0',
+                    'semId':semestry[sem_ID][1],
+                    'wybierzSemKal':semestry[sem_ID][0]
+                }
 
-                self.sData[i]['grade']=grade
+                # PRZEJSCIE DO WYBRANEGO SEMESTRU
+                response = self.session.get(przedmiotyURL,params=param)
 
-            response = self.session.get(wynikiURL,params=param)
-            page = html.fromstring(response.content.decode('utf-8'))
-            grade = page.xpath("//td[@style='color: green; vertical-align: middle' or @style='color: red; vertical-align: middle']/text()")[0]
-            grade = "".join(str(grade).split())
-            try:
-                grade = float(grade)
-            except ValueError:
-                pass
-            self.sData[i]['grade']=grade
-            param = {
-                'osobaid':'0',
-                'semId':semestry[0][1],
-                'wybierzSemKal':semestry[0][0]
-            }
-
-            # PRZEJSCIE DO WYBRANEGO SEMESTRU
-            response = self.session.get(przedmiotyURL,params=param)
-
-        for i in self.sData:
-            print "%45s: %3s" % (i['name'],i['grade'])
-
-        self.average(self.sData)
+        for x in range(lenSem):
+            print "%65s" % self.sem2word(semestry[x][0])
+            for i in self.sData[x]:
+                print "%60s: %3s" % (i['name'],i['grade'])
+            print '-'*65
+            self.average(self.sData[x])
+            print ""
 
 
 
@@ -184,7 +203,14 @@ class Student:
                 count+=1
                 suma+=i['grade']
 
-        print "%44s: %3.2f" % ("Srednia: ",(suma/count))
+        print "%59s: %3.2f" % ("Srednia",(suma/count))
+
+    def sem2word(self,sem):
+        next = str(int(sem[:-1])+1)
+        if sem[-1] == '1':
+            return sem[:-1]+'/'+next+' Zimowy'
+        else:
+            return sem[:-1]+'/'+next+' Letni'
 
 
 
